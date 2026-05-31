@@ -1,6 +1,5 @@
-const { app, BrowserWindow, Menu, Tray, shell } = require('electron')
+const { app, BrowserWindow, shell } = require('electron')
 const path = require('path')
-const url = require('url')
 
 let mainWindow = null
 
@@ -15,27 +14,26 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      preload: path.join(__dirname, 'preload.cjs')
+      preload: path.join(__dirname, 'preload.cjs'),
     },
     autoHideMenuBar: true,
-    show: false,
   })
 
-  const startUrl = url.pathToFileURL(path.join(__dirname, '../dist/index.html'))
-  mainWindow.loadURL(startUrl.href)
-
-  mainWindow.once('ready-to-show', () => {
-    mainWindow.show()
-  })
-
-  mainWindow.on('closed', () => {
-    mainWindow = null
+  // Use loadFile (Electron handles asar paths automatically)
+  // This is more reliable than url.pathToFileURL for packaged apps
+  const indexPath = path.join(__dirname, '..', 'dist', 'index.html')
+  mainWindow.loadFile(indexPath).catch(err => {
+    console.error('[JobHunter] Failed to load index.html:', err)
   })
 
   // Open external links in default browser
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url)
     return { action: 'deny' }
+  })
+
+  mainWindow.on('closed', () => {
+    mainWindow = null
   })
 }
 
