@@ -162,8 +162,9 @@ export default function JobSearcher({ profile }) {
       setSearchMode('background')
       window.dispatchEvent(new CustomEvent('jobs-found', { detail: foundJobs }))
     } else if (storedCreds?.linkedin?.email || storedCreds?.naukri?.email) {
+      // Credentials saved but background search unavailable (Android/Windows fallback)
       setSearchDone(true)
-      setSearchMode('no-credentials')
+      setSearchMode('no-backend-search')
       setJobCount(0)
     } else {
       setSearchDone(true)
@@ -228,12 +229,19 @@ export default function JobSearcher({ profile }) {
         {searching ? <><SpinnerIcon /> Searching in background... </> :
          searchDone && searchMode === 'background' ? <><CheckIcon /> Done! {jobCount} jobs from {searchedPlatforms.join(' + ')} </> :
          searchDone && searchMode === 'no-credentials' ? <><AlertIcon /> No credentials saved — go to Account Login first </> :
+         searchDone && searchMode === 'no-backend-search' ? <><AlertIcon /> Credentials saved — background search unavailable on this device, use Search buttons below </> :
          <><GlobeIcon /> Search All Platforms — Background </>}
       </button>
 
       {searchDone && searchMode === 'no-credentials' && (
         <p className="js-note" style={{ color: '#f87171', marginTop: 4 }}>
           ⚠ No platform credentials saved. Go to "Account Login" above to add LinkedIn and/or Naukri credentials, then come back here.
+        </p>
+      )}
+
+      {searchDone && searchMode === 'no-backend-search' && (
+        <p className="js-note" style={{ color: '#fbbf24', marginTop: 4 }}>
+          📱 Credentials saved ✅ — but background search is only available on Windows. Tap individual platform buttons above to search in your browser.
         </p>
       )}
 
