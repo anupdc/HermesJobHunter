@@ -1660,3 +1660,225 @@
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
 }
+
+/* ═══════════════════════════════════════════════════════════
+   CREDENTIALS MANAGER STYLES
+═══════════════════════════════════════════════════════════ */
+.creds-manager {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.creds-info {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  background: rgba(59,130,246,0.08);
+  border: 1px solid rgba(59,130,246,0.2);
+  border-radius: 10px;
+  color: #64748b;
+}
+
+.creds-info svg {
+  color: #3b82f6;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.creds-info p {
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.creds-card {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.creds-card-header {
+  padding: 14px 16px;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  background: rgba(255,255,255,0.02);
+}
+
+.creds-platform {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.creds-emoji {
+  font-size: 24px;
+  line-height: 1;
+}
+
+.creds-platform > div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.creds-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: white;
+}
+
+.creds-status {
+  font-size: 11px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.creds-fields {
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.creds-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.creds-field label {
+  font-size: 12px;
+  font-weight: 500;
+  color: #94a3b8;
+}
+
+.creds-input {
+  padding: 10px 12px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 8px;
+  color: white;
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.2s;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.creds-input:focus {
+  border-color: #3b82f6;
+}
+
+.creds-input::placeholder {
+  color: #475569;
+}
+
+.creds-password-wrap {
+  position: relative;
+}
+
+.creds-password-wrap .creds-input {
+  padding-right: 38px;
+}
+
+.creds-eye {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #64748b;
+  display: flex;
+  align-items: center;
+  padding: 4px;
+}
+
+.creds-eye:hover {
+  color: #94a3b8;
+}
+
+.creds-test-result {
+  margin: 0 14px 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.creds-test-result.success {
+  background: rgba(34,197,94,0.1);
+  color: #4ade80;
+  border: 1px solid rgba(34,197,94,0.2);
+}
+
+.creds-test-result.error {
+  background: rgba(239,68,68,0.1);
+  color: #f87171;
+  border: 1px solid rgba(239,68,68,0.2);
+}
+
+.creds-actions {
+  display: flex;
+  gap: 8px;
+  padding: 12px 14px;
+  border-top: 1px solid rgba(255,255,255,0.05);
+}
+
+.creds-test-btn {
+  flex: 1;
+  padding: 9px 14px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 8px;
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.creds-test-btn:hover:not(:disabled) {
+  background: rgba(255,255,255,0.1);
+  color: white;
+}
+
+.creds-test-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.creds-save-btn {
+  flex: 1;
+  padding: 9px 14px;
+  background: #3b82f6;
+  border: none;
+  border-radius: 8px;
+  color: white;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.creds-save-btn:hover:not(:disabled) {
+  background: #2563eb;
+}
+
+.creds-save-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.creds-note {
+  font-size: 11px;
+  color: #475569;
+  text-align: center;
+  line-height: 1.5;
+  padding: 0 4px;
+}

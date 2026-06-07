@@ -104,20 +104,21 @@ export default function JobSearcher({ profile }) {
     setSearching(true)
     setJobCount(null)
 
-    // Try Electron real search first (uses local Chromium)
-    if (window.electronAPI?.searchJobs) {
+    // Try credentialed search first (uses local Chromium + your stored credentials)
+    if (window.electronAPI?.searchJobsCredentialed) {
       try {
-        const jobs = await window.electronAPI.searchJobs(keywords, 'Bangalore')
+        const jobs = await window.electronAPI.searchJobsCredentialed(keywords, 'Bangalore')
         setJobCount(jobs.length)
         setSearchDone(true)
-        // Dispatch event so App.jsx can add these jobs
-        window.dispatchEvent(new CustomEvent('jobs-found', { detail: jobs }))
+        if (jobs.length > 0) {
+          window.dispatchEvent(new CustomEvent('jobs-found', { detail: jobs }))
+        }
       } catch (e) {
-        console.error('Electron search failed, falling back to browser tabs', e)
+        console.error('Credentialed search failed:', e)
       }
     }
 
-    // Also open browser tabs for platforms we can't scrape directly
+    // Also open browser tabs as supplementary (for platforms without stored creds)
     const urls = PLATFORMS.map(p => buildSearchUrl(p.searchTemplate, keywords))
     if (window.electronAPI?.openSearchUrls) {
       await window.electronAPI.openSearchUrls(urls)
@@ -126,7 +127,7 @@ export default function JobSearcher({ profile }) {
     }
 
     setSearching(false)
-    setTimeout(() => setSearchDone(false), 5000)
+    setTimeout(() => setSearchDone(false), 8000)
   }
 
   const handleSearchOne = (platform) => {
