@@ -162,10 +162,26 @@ export default function JobSearcher({ profile }) {
       setSearchMode('background')
       window.dispatchEvent(new CustomEvent('jobs-found', { detail: foundJobs }))
     } else if (storedCreds?.linkedin?.email || storedCreds?.naukri?.email) {
-      // Credentials saved but background search unavailable (Android/Windows fallback)
+      // Credentials saved — open all platform search URLs in browser (Android fallback)
+      const credPlatforms = []
+      if (storedCreds?.linkedin?.email) credPlatforms.push('LinkedIn')
+      if (storedCreds?.naukri?.email) credPlatforms.push('Naukri')
+      searchedPlatforms.push(...credPlatforms)
+
+      // Open credential platforms first, then all 7
+      const allUrls = PLATFORMS.map(p => buildSearchUrl(p.searchTemplate, keywords))
+      if (window.electronAPI?.openSearchUrls) {
+        await window.electronAPI.openSearchUrls(allUrls)
+      } else {
+        // Android: open with staggered delays to avoid popup blocking
+        for (let i = 0; i < allUrls.length; i++) {
+          setTimeout(() => window.open(allUrls[i], '_blank'), i * 800)
+        }
+      }
+
+      setJobCount(0)
       setSearchDone(true)
       setSearchMode('no-backend-search')
-      setJobCount(0)
     } else {
       setSearchDone(true)
       setSearchMode('no-credentials')
@@ -192,7 +208,7 @@ export default function JobSearcher({ profile }) {
       <div className="jobsearcher-header">
         <h3 className="jobsearcher-title">Search All Platforms</h3>
         <p className="jobsearcher-subtitle">
-          Searches LinkedIn + Naukri in the background using your stored credentials — or opens browser tabs if blocked.
+          Searches LinkedIn + Naukri in the background using your stored credentials
         </p>
       </div>
 
@@ -229,7 +245,7 @@ export default function JobSearcher({ profile }) {
         {searching ? <><SpinnerIcon /> Searching in background... </> :
          searchDone && searchMode === 'background' ? <><CheckIcon /> Done! {jobCount} jobs from {searchedPlatforms.join(' + ')} </> :
          searchDone && searchMode === 'no-credentials' ? <><AlertIcon /> No credentials saved — go to Account Login first </> :
-         searchDone && searchMode === 'no-backend-search' ? <><AlertIcon /> Credentials saved — background search unavailable on this device, use Search buttons below </> :
+         searchDone && searchMode === 'no-backend-search' ? <><CheckIcon /> Done! {searchedPlatforms.join(' + ')} opened in browser </> :
          <><GlobeIcon /> Search All Platforms — Background </>}
       </button>
 
@@ -240,8 +256,8 @@ export default function JobSearcher({ profile }) {
       )}
 
       {searchDone && searchMode === 'no-backend-search' && (
-        <p className="js-note" style={{ color: '#fbbf24', marginTop: 4 }}>
-          📱 Credentials saved ✅ — but background search is only available on Windows. Tap individual platform buttons above to search in your browser.
+        <p className="js-note" style={{ color: '#22c55e', marginTop: 4 }}>
+          ✅ All {PLATFORMS.length} platforms opened in your browser — job results are waiting in those tabs!
         </p>
       )}
 
