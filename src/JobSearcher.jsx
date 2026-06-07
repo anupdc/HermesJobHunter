@@ -4,6 +4,7 @@ const SearchIcon = () => (<svg width="18" height="18" viewBox="0 0 24 24" fill="
 const CheckIcon = () => (<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>)
 const GlobeIcon = () => (<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>)
 const SpinnerIcon = () => (<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ animation: 'spin 1s linear infinite' }}><circle cx="12" cy="12" r="10" strokeOpacity="0.25"/><path d="M12 2a10 10 0 0 1 10 10" strokeOpacity="1"/></svg>)
+const AlertIcon = () => (<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>)
 
 const PLATFORMS = [
   {
@@ -15,7 +16,6 @@ const PLATFORMS = [
     searchTemplate: 'https://www.naukri.com/jobs-in-bangalore?q={query}&k={query}&l=Bangalore',
     icon: '🇮🇳',
     strength: "Best for Indian D365/Azure/ERP roles. Recruiters actively search here.",
-    searchMode: 'browser', // use browser tab since HTTP is blocked
   },
   {
     name: 'LinkedIn',
@@ -26,7 +26,6 @@ const PLATFORMS = [
     searchTemplate: 'https://www.linkedin.com/jobs/search/?keywords={query}&location=Bangalore&f_TPR=r604800&sortBy=DD',
     icon: '💼',
     strength: "Best for senior/lead roles. Your network visibility helps.",
-    searchMode: 'browser',
   },
   {
     name: 'Indeed India',
@@ -37,7 +36,6 @@ const PLATFORMS = [
     searchTemplate: 'https://in.indeed.com/jobs?q={query}&l=Bangalore&fromage=7&sort=date',
     icon: '✅',
     strength: 'Aggregates from company career pages. Good for salary filtering.',
-    searchMode: 'browser',
   },
   {
     name: 'Shine',
@@ -48,7 +46,6 @@ const PLATFORMS = [
     searchTemplate: 'https://www.shine.com/job-search/q-{query}-in-bangalore-4-10-years-exp/',
     icon: '✨',
     strength: "Good for mid-level D365 roles. Less crowded than Naukri.",
-    searchMode: 'browser',
   },
   {
     name: 'Foundit',
@@ -59,7 +56,6 @@ const PLATFORMS = [
     searchTemplate: 'https://www.foundit.in/s/jobs?q={query}&l=Bangalore&exp=4,15',
     icon: '🎯',
     strength: "Direct recruiter contact info. Good for senior D365 roles.",
-    searchMode: 'browser',
   },
   {
     name: 'FreshersLive',
@@ -70,7 +66,6 @@ const PLATFORMS = [
     searchTemplate: 'https://www.fresherslive.com/search/{query}-jobs-in-bangalore',
     icon: '🌱',
     strength: 'Good for early-career D365 moves or first ERP roles.',
-    searchMode: 'browser',
   },
   {
     name: 'Wellfound',
@@ -81,7 +76,6 @@ const PLATFORMS = [
     searchTemplate: 'https://wellfound.com/jobs?query={query}&location=Bangalore',
     icon: '🏭',
     strength: "Startups in Bangalore need Azure/D365 integrators. Equity-focused.",
-    searchMode: 'browser',
   },
 ]
 
@@ -93,6 +87,7 @@ export default function JobSearcher({ profile }) {
   const [searching, setSearching] = useState(false)
   const [searchDone, setSearchDone] = useState(false)
   const [jobCount, setJobCount] = useState(null)
+  const [searchMode, setSearchMode] = useState(null) // 'background' | 'browser-fallback' | 'error'
 
   const searchQuery = [
     ...(profile.keywords || ['Dynamics 365', 'D365 F&O', 'Azure', 'ERP Developer', 'X++']),
@@ -103,32 +98,43 @@ export default function JobSearcher({ profile }) {
   const handleSearchAll = async () => {
     setSearching(true)
     setJobCount(null)
+    setSearchMode(null)
 
-    // Open all browser tabs IMMEDIATELY — don't wait for credentialed scrape
-    const urls = PLATFORMS.map(p => buildSearchUrl(p.searchTemplate, keywords))
-    if (window.electronAPI?.openSearchUrls) {
-      const result = await window.electronAPI.openSearchUrls(urls)
-      console.log(`Opened ${result?.opened || urls.length} browser tabs`)
-    } else {
-      urls.forEach(url => window.open(url, '_blank'))
-    }
+    // Background scrape first using stored credentials
+    let foundJobs = []
+    let scrapeWorked = false
 
-    // Then try credentialed scrape in background — updates job count if it works
     if (window.electronAPI?.searchJobsCredentialed) {
       try {
         const jobs = await window.electronAPI.searchJobsCredentialed(keywords, 'Bangalore')
-        setJobCount(jobs.length)
-        setSearchDone(true)
-        if (jobs.length > 0) {
+        if (jobs && jobs.length > 0) {
+          foundJobs = jobs
+          scrapeWorked = true
+          setJobCount(jobs.length)
+          setSearchDone(true)
           window.dispatchEvent(new CustomEvent('jobs-found', { detail: jobs }))
+          console.log(`Background scrape found ${jobs.length} jobs`)
         }
       } catch (e) {
         console.error('Credentialed search failed:', e)
       }
     }
 
+    // If background scrape found nothing, open browser tabs as fallback
+    if (!scrapeWorked) {
+      setSearchMode('browser-fallback')
+      const urls = PLATFORMS.map(p => buildSearchUrl(p.searchTemplate, keywords))
+      if (window.electronAPI?.openSearchUrls) {
+        await window.electronAPI.openSearchUrls(urls)
+      } else {
+        urls.forEach(url => window.open(url, '_blank'))
+      }
+    } else {
+      setSearchMode('background')
+    }
+
     setSearching(false)
-    setTimeout(() => setSearchDone(false), 8000)
+    setTimeout(() => setSearchDone(false), 10000)
   }
 
   const handleSearchOne = (platform) => {
@@ -147,7 +153,7 @@ export default function JobSearcher({ profile }) {
       <div className="jobsearcher-header">
         <h3 className="jobsearcher-title">Search All Platforms</h3>
         <p className="jobsearcher-subtitle">
-          Opens pre-filled searches in your browser where you're already logged in. Real results, no blocks.
+          Searches LinkedIn + Naukri in the background using your stored credentials — or opens browser tabs if blocked.
         </p>
       </div>
 
@@ -181,14 +187,23 @@ export default function JobSearcher({ profile }) {
         onClick={handleSearchAll}
         disabled={searching}
       >
-        {searching ? <><SpinnerIcon /> Searching all platforms... </> :
-         searchDone ? <><CheckIcon /> Done! ({jobCount} jobs found) </> :
-         <><GlobeIcon /> Search All Platforms at Once </>}
+        {searching ? <><SpinnerIcon /> Searching in background... </> :
+         searchDone && searchMode === 'background' ? <><CheckIcon /> Done! {jobCount} jobs pulled from LinkedIn + Naukri </> :
+         searchDone && searchMode === 'browser-fallback' ? <><GlobeIcon /> Opened 7 tabs in browser (LinkedIn blocked automated access) </> :
+         <><GlobeIcon /> Search All Platforms — Background </>}
       </button>
 
-      <p className="js-note">
-        💡 Each platform opens in a new tab with your exact skills pre-filled. Bookmark results to track them.
-      </p>
+      {searchDone && searchMode === 'browser-fallback' && (
+        <p className="js-note" style={{ color: '#f59e0b', marginTop: 4 }}>
+          💡 Tip: Save LinkedIn + Naukri credentials in "Account Login" — background search won't need browser tabs
+        </p>
+      )}
+
+      {searchDone && searchMode === 'background' && (
+        <p className="js-note" style={{ color: '#4ade80', marginTop: 4 }}>
+          ✅ Jobs pulled directly from your LinkedIn + Naukri accounts and added to the app
+        </p>
+      )}
     </div>
   )
 }
