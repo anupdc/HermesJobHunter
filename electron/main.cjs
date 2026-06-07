@@ -538,6 +538,19 @@ ipcMain.handle('get-credentials', async () => {
   return loadCredentials()
 })
 
+ipcMain.handle('get-raw-credentials', async () => {
+  // Return raw file contents so we can diagnose save/load issues
+  try {
+    const fs = require('fs')
+    if (!fs.existsSync(CREDS_FILE)) return 'FILE_NOT_FOUND'
+    const raw = fs.readFileSync(CREDS_FILE, 'utf8').trim()
+    if (!raw) return 'FILE_EMPTY'
+    return `FILE_SIZE:${raw.length}_FIRST50:${raw.slice(0, 50)}`
+  } catch (e) {
+    return 'ERROR: ' + e.message
+  }
+})
+
 ipcMain.handle('test-credentials', async (event, platform, creds) => {
   return await testConnection(platform, creds)
 })
