@@ -409,11 +409,20 @@ ipcMain.handle('search-jobs-credentialed', async (event, { keywords, location })
 
 ipcMain.handle('open-search-urls', async (event, urls) => {
   log('info', 'Opening URLs in browser:', urls.length)
+  // Open all simultaneously — shell.openExternal is non-blocking
   for (const url of urls) {
-    shell.openExternal(url)
-    await new Promise(r => setTimeout(r, 500))
+    try {
+      shell.openExternal(url)
+    } catch (e) {
+      log('warn', 'Failed to open URL:', url, e.message)
+    }
   }
-  return true
+  return { opened: urls.length }
+})
+
+ipcMain.handle('search-jobs', async (event, { keywords, location }) => {
+  log('info', 'IPC search-jobs received')
+  return [] // Fallback — credentialed search is preferred
 })
 
 // ─── App lifecycle ─────────────────────────────────────────────────────────────

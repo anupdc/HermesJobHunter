@@ -104,7 +104,16 @@ export default function JobSearcher({ profile }) {
     setSearching(true)
     setJobCount(null)
 
-    // Try credentialed search first (uses local Chromium + your stored credentials)
+    // Open all browser tabs IMMEDIATELY — don't wait for credentialed scrape
+    const urls = PLATFORMS.map(p => buildSearchUrl(p.searchTemplate, keywords))
+    if (window.electronAPI?.openSearchUrls) {
+      const result = await window.electronAPI.openSearchUrls(urls)
+      console.log(`Opened ${result?.opened || urls.length} browser tabs`)
+    } else {
+      urls.forEach(url => window.open(url, '_blank'))
+    }
+
+    // Then try credentialed scrape in background — updates job count if it works
     if (window.electronAPI?.searchJobsCredentialed) {
       try {
         const jobs = await window.electronAPI.searchJobsCredentialed(keywords, 'Bangalore')
@@ -116,14 +125,6 @@ export default function JobSearcher({ profile }) {
       } catch (e) {
         console.error('Credentialed search failed:', e)
       }
-    }
-
-    // Also open browser tabs as supplementary (for platforms without stored creds)
-    const urls = PLATFORMS.map(p => buildSearchUrl(p.searchTemplate, keywords))
-    if (window.electronAPI?.openSearchUrls) {
-      await window.electronAPI.openSearchUrls(urls)
-    } else {
-      urls.forEach(url => window.open(url, '_blank'))
     }
 
     setSearching(false)
