@@ -1,7 +1,13 @@
 const { app, BrowserWindow, shell } = require('electron')
 const path = require('path')
+const { pathToFileURL } = require('url')
 
 let mainWindow = null
+
+function log(level, ...args) {
+  const ts = new Date().toISOString()
+  console[level](`[JobHunter][${ts}]`, ...args)
+}
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -15,18 +21,48 @@ function createWindow() {
       nodeIntegration: false,
       contextIsolation: true,
       preload: path.join(__dirname, 'preload.cjs'),
+      webSecurity: false,  // disable for local file loading
     },
     autoHideMenuBar: true,
+    show: false,
   })
 
-  // Use loadFile (Electron handles asar paths automatically)
-  // This is more reliable than url.pathToFileURL for packaged apps
+  // Build path to index.html inside asar
   const indexPath = path.join(__dirname, '..', 'dist', 'index.html')
-  mainWindow.loadFile(indexPath).catch(err => {
-    console.error('[JobHunter] Failed to load index.html:', err)
+  log('info', 'indexPath resolved to:', indexPath)
+  log('info', '__dirname inside asar is:', __dirname)
+
+  // Use file:// protocol directly
+  const indexUrl = `file://${indexPath.replace(/\\/g, '/')}`
+  log('info', 'Loading URL:', indexUrl)
+
+  mainWindow.loadURL(indexUrl).then(() => {
+    log('info', 'loadURL succeeded')
+  }).catch(err => {
+    log('error', 'loadURL failed:', err.message || err)
   })
 
-  // Open external links in default browser
+  // Show window only when ready to avoid flash of blank
+  mainWindow.once('ready-to-show', () => {
+    log('info', 'ready-to-show fired')
+    mainWindow.show()
+  })
+
+  // Capture renderer errors
+  mainWindow.webContents.on('crashed', () => log('error', 'Renderer crashed'))
+  mainWindow.webContents.on('render-process-gone', (e, details) => {
+    log('error', 'Render process gone:', details.reason)
+  })
+  mainWindow.webContents.on('console-message', (e, level, msg) => {
+    log('info', `[Renderer console][${level}]`, msg)
+  })
+  mainWindow.webContents.on('did-fail-load', (e, errCode, errDesc) => {
+    log('error', `did-fail-load: ${errCode} - ${errDesc}`)
+  })
+  mainWindow.webContents.on('did-finish-load', () => {
+    log('info', 'did-finish-load fired')
+  })
+
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url)
     return { action: 'deny' }
@@ -35,11 +71,14 @@ function createWindow() {
   mainWindow.on('closed', () => {
     mainWindow = null
   })
+
+  // Open DevTools in case window stays blank
+  mainWindow.webContents.openDevTools()
 }
 
 app.whenReady().then(() => {
+  log('info', 'App ready')
   createWindow()
-
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })

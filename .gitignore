@@ -22,3 +22,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Electron builds (release binaries — use GitHub Releases for distributables)
+release/win-unpacked/
+release/*.zip
+hermes-jobhunter-clone/

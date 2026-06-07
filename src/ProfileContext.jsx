@@ -97,9 +97,9 @@ export function ProfileProvider({ children }) {
   const [appliedJobs, setAppliedJobs] = useState(() => {
     try { return JSON.parse(localStorage.getItem('jh_applied') || '[]') } catch { return [] }
   })
-  const [savedJobs, setSavedJobs] = useState(new Set(() => {
+  const [savedJobs, setSavedJobs] = useState(() => {
     try { return new Set(JSON.parse(localStorage.getItem('jh_saved') || '[]')) } catch { return new Set() }
-  }))
+  })
 
   useEffect(() => { localStorage.setItem('jh_profile', JSON.stringify(profile)) }, [profile])
   useEffect(() => { localStorage.setItem('jh_schedule', JSON.stringify(schedule)) }, [schedule])
