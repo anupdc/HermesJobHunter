@@ -1,21 +1,157 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useProfile } from './ProfileContext'
 
-// ─── ATS Resume & Cover Letter Tailoring ───────────────────────────────────
+// ─── LLM Integration ─────────────────────────────────────────────────────────
 
-function generateATSTailoredResume(originalResume, job, profile) {
-  // Extract key skills from job tags
+async function callOpenAI(apiKey, resumeText, job, profile) {
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`
+    },
+    body: JSON.stringify({
+      model: 'gpt-4o',
+      max_tokens: 2000,
+      temperature: 0.7,
+      messages: [
+        {
+          role: 'system',
+          content: `You are an expert ATS resume writer and cover letter composer. 
+Your task: Given a candidate's resume and a job description, produce:
+1. An ATS-optimized resume tailored to the job (emphasize matching keywords, quantify achievements, use ATS-friendly formatting)
+2. A personalized cover letter
+
+Format your response STRICTLY as:
+---
+TAILORED_RESUME:
+[full tailored resume here - name/contact header, SUMMARY, EXPERIENCE (with ATS keywords highlighted), SKILLS (relevant skills first), EDUCATION, CERTIFICATIONS]
+---
+COVER_LETTER:
+[personalized cover letter - 3-4 paragraphs, specific to the company and role]
+---
+Do NOT use any prefix like "Here is" or "Certainly". Start immediately with TAILORED_RESUME:`
+        },
+        {
+          role: 'user',
+          content: `CANDIDATE RESUME:
+${resumeText}
+
+TARGET JOB:
+Title: ${job.title}
+Company: ${job.company}
+Location: ${job.location}
+Salary: ${job.salary}
+Description: ${job.description}
+Tags/Requirements: ${(job.tags || []).join(', ')}
+
+Candidate Profile:
+- Name: ${profile.name}
+- Email: ${profile.email}
+- Phone: ${profile.phone}
+- Experience: ${profile.experience}
+- Location: ${profile.location}
+- Title: ${profile.title}
+- Summary: ${profile.summary}
+
+Please produce the ATS-tailored resume and cover letter.`
+        }
+      ]
+    })
+  })
+  if (!response.ok) throw new Error(`OpenAI error: ${response.status}`)
+  const data = await response.json()
+  return data.choices[0].message.content
+}
+
+async function callGemini(apiKey, resumeText, job, profile) {
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{
+          parts: [{
+            text: `You are an expert ATS resume writer and cover letter composer.
+Given a candidate's resume and a job description, produce:
+1. An ATS-optimized resume tailored to the job (emphasize matching keywords, quantify achievements, use ATS-friendly formatting)
+2. A personalized cover letter
+
+Format your response STRICTLY as:
+---
+TAILORED_RESUME:
+[full tailored resume here - name/contact header, SUMMARY, EXPERIENCE (with ATS keywords), SKILLS (relevant skills first), EDUCATION, CERTIFICATIONS]
+---
+COVER_LETTER:
+[personalized cover letter - 3-4 paragraphs, specific to the company and role]
+---
+CANDIDATE RESUME:
+${resumeText}
+
+TARGET JOB:
+Title: ${job.title}
+Company: ${job.company}
+Location: ${job.location}
+Salary: ${job.salary}
+Description: ${job.description}
+Tags/Requirements: ${(job.tags || []).join(', ')}
+
+Candidate Profile:
+- Name: ${profile.name}
+- Email: ${profile.email}
+- Phone: ${profile.phone}
+- Experience: ${profile.experience}
+- Location: ${profile.location}
+- Title: ${profile.title}`
+          }]
+        }],
+        generationConfig: { maxOutputTokens: 2000, temperature: 0.7 }
+      })
+    }
+  )
+  if (!response.ok) throw new Error(`Gemini error: ${response.status}`)
+  const data = await response.json()
+  return data.candidates[0].content.parts[0].text
+}
+
+function parseLLMResponse(raw) {
+  // Parse the TAILORED_RESUME and COVER_LETTER sections from LLM output
+  const resumeMatch = raw.match(/---[\s\n]*TAILORED_RESUME:([\s\S]*?)---[\s\n]*COVER_LETTER:/i)
+  const coverMatch = raw.match(/COVER_LETTER:([\s\S]*)$/i)
+
+  let tailoredResume = raw // fallback to full raw
+  let tailoredCover = ''
+
+  if (resumeMatch) tailoredResume = resumeMatch[1].trim()
+  if (coverMatch) tailoredCover = coverMatch[1].trim()
+
+  // If parsing failed, try simpler pattern
+  if (!resumeMatch || !coverMatch) {
+    const parts = raw.split('---')
+    if (parts.length >= 3) {
+      tailoredResume = parts[1].replace(/TAILORED_RESUME:/gi, '').trim()
+      tailoredCover = parts[2].replace(/COVER_LETTER:/gi, '').replace(/^\s*/, '').trim()
+    }
+  }
+
+  return { tailoredResume, tailoredCover }
+}
+
+// ─── Fallback rule-based tailoring ────────────────────────────────────────────
+
+function generateFallbackResume(originalResume, job, profile) {
   const jobSkills = job.tags || []
-  // Simple keyword extraction from job description
   const descWords = (job.description || '').toLowerCase().split(/\s+/)
-  const skillKeywords = ['x++', 'azure', 'd365', 'power platform', 'sql', 'c#', '.net',
+  const skillKeywords = [
+    'x++', 'azure', 'd365', 'power platform', 'sql', 'c#', '.net',
     'devops', 'ci/cd', 'logic apps', 'odata', 'fabric', 'power bi', 'erp',
-    'finance', 'retail', 'wms', 'supply chain', 'integration', 'api']
-
+    'finance', 'retail', 'wms', 'supply chain', 'integration', 'api',
+    'dynamics', 'lcs', '.net', 'visual studio', 'service bus', 'functions'
+  ]
   const mentionedSkills = skillKeywords.filter(s => descWords.some(w => w.includes(s.split(' ')[0])))
   const relevantSkills = [...new Set([...jobSkills, ...mentionedSkills])]
 
-  // Build ATS-optimized sections
   const lines = originalResume.split('\n')
   const sections = { summary: [], experience: [], skills: [], education: [], certs: [], other: [] }
   let current = 'other'
@@ -29,15 +165,12 @@ function generateATSTailoredResume(originalResume, job, profile) {
     sections[current].push(line)
   }
 
-  // Rebuild with job-specific keyword density
   let output = []
-  // Header
   output.push(profile.name.toUpperCase())
   output.push(`${profile.title} | ${profile.experience} Experience`)
   output.push(`${profile.email} | ${profile.phone} | ${profile.location}`)
   output.push('')
 
-  // ATS Summary - inject job-specific keywords
   const atsSummary = sections.summary.join('\n').replace(
     /(D365 F&O Developer.*?)(?=\n[A-Z])/si,
     (match) => match + ` Proficient in ${relevantSkills.slice(0, 5).join(', ')}.`
@@ -45,22 +178,16 @@ function generateATSTailoredResume(originalResume, job, profile) {
   output.push(atsSummary || `SUMMARY\n${profile.summary}`)
   output.push('')
 
-  // Experience - highlight matching skills
   if (sections.experience.length > 0) {
     const expBlock = sections.experience.join('\n')
-    // Inject job keywords where relevant
     let enhanced = expBlock
     if (mentionedSkills.some(s => s.includes('devops') || s.includes('azure'))) {
-      enhanced = enhanced.replace(
-        /(Azure DevOps|CI\/CD|LCS)/g,
-        (m) => `**${m}** (ATS HIGHLIGHTED)`
-      )
+      enhanced = enhanced.replace(/(Azure DevOps|CI\/CD|LCS)/g, (m) => `${m} (ATS HIGHLIGHTED)`)
     }
     output.push(enhanced)
     output.push('')
   }
 
-  // Skills - prioritize job-relevant
   const allSkills = profile.skills || []
   const reorderedSkills = [
     ...relevantSkills.filter(s => allSkills.map(as => as.toLowerCase()).includes(s.toLowerCase())),
@@ -75,14 +202,13 @@ function generateATSTailoredResume(originalResume, job, profile) {
   return output.join('\n')
 }
 
-function generateTailoredCoverLetter(template, job, profile) {
+function generateFallbackCover(template, job, profile) {
   const personalization = [
     `Your focus on ${job.tags?.[0] || 'enterprise solutions'} aligns directly with my recent work at HPE implementing D365 F&O for Fortune 500 clients.`,
     `I have hands-on experience with ${job.tags?.slice(0, 2).join(' and ') || 'D365 F&O'} which matches your requirements perfectly.`,
     `The ${job.company} commitment to innovation in ${job.tags?.[0] || 'technology'} matches my passion for cutting-edge ERP solutions.`,
   ]
   const reason = personalization[Math.floor(Math.random() * personalization.length)]
-
   return template
     .replace(/\{JOB_TITLE\}/g, job.title)
     .replace(/\{COMPANY\}/g, job.company)
@@ -91,7 +217,50 @@ function generateTailoredCoverLetter(template, job, profile) {
     .replace(/\{APPLICANT_NAME\}/g, profile.name)
 }
 
-// ─── Icons ─────────────────────────────────────────────────────────────────
+// ─── Email notification ───────────────────────────────────────────────────────
+
+async function sendGmailNotification(profile, job, tailoredResume, tailoredCover) {
+  try {
+    const subject = `JobHunter: Applied to ${job.title} at ${job.company}`
+    const body = `
+Applied Job Details:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Position: ${job.title}
+Company: ${job.company}
+Location: ${job.location}
+Salary: ${job.salary}
+Type: ${job.type}
+Posted: ${job.posted}
+Match Score: ${job.match}%
+Remote: ${job.remote ? 'Yes' : 'No'}
+Tags: ${(job.tags || []).join(', ')}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Applied at: ${new Date().toLocaleString()}
+Your tailored resume and cover letter are saved in the JobHunter app.
+    `.trim()
+
+    const API_BASE = 'http://172.16.3.2:18081'
+    const res = await fetch(`${API_BASE}/email/send`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        to: profile.email,
+        subject,
+        body,
+        from: profile.email
+      })
+    })
+    if (!res.ok) throw new Error(`Email API error: ${res.status}`)
+    const result = await res.json()
+    if (result.error) throw new Error(result.error)
+    return true
+  } catch (e) {
+    console.warn('Gmail notification failed:', e.message)
+    return false
+  }
+}
+
+// ─── Icons ────────────────────────────────────────────────────────────────────
 
 const CloseIcon = () => (
   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -106,7 +275,7 @@ const FileTextIcon = () => (
   </svg>
 )
 const SendIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
     <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
   </svg>
 )
@@ -120,8 +289,20 @@ const SparkleIcon = () => (
     <path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/>
   </svg>
 )
+const RefreshIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+    <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+  </svg>
+)
+const EditIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+  </svg>
+)
 
-// ─── ResumeModal ────────────────────────────────────────────────────────────
+// ─── ResumeModal ────────────────────────────────────────────────────────────────
 
 export default function ResumeModal({ job, onClose, onApplied }) {
   const { profile, addAppliedJob } = useProfile()
@@ -131,32 +312,164 @@ export default function ResumeModal({ job, onClose, onApplied }) {
   const [resumeApproved, setResumeApproved] = useState(false)
   const [coverApproved, setCoverApproved] = useState(false)
   const [generating, setGenerating] = useState(false)
+  const [generatingLabel, setGeneratingLabel] = useState('')
+  const [error, setError] = useState('')
+  // Editable states
+  const [editingResume, setEditingResume] = useState(false)
+  const [editingCover, setEditingCover] = useState(false)
+  const [resumeDraft, setResumeDraft] = useState('')
+  const [coverDraft, setCoverDraft] = useState('')
+  const [emailSent, setEmailSent] = useState(false)
+  const resumeRef = useRef()
+  const coverRef = useRef()
+
+  const generateDocs = async () => {
+    setGenerating(true)
+    setError('')
+    setGeneratingLabel('Initializing AI...')
+    setStep('generating')
+
+    try {
+      const hasApiKey = profile.llmApiKey && profile.llmApiKey.trim().length > 0
+
+      if (hasApiKey && profile.llmProvider === 'gemini') {
+        setGeneratingLabel('Calling Gemini AI...')
+        const raw = await callGemini(profile.llmApiKey.trim(), profile.resumeText, job, profile)
+        const parsed = parseLLMResponse(raw)
+        setTailoredResume(parsed.tailoredResume || generateFallbackResume(profile.resumeText, job, profile))
+        setTailoredCover(parsed.tailoredCover || generateFallbackCover(profile.coverLetterTemplate, job, profile))
+      } else if (hasApiKey && profile.llmProvider === 'openai') {
+        setGeneratingLabel('Calling OpenAI GPT-4o...')
+        const raw = await callOpenAI(profile.llmApiKey.trim(), profile.resumeText, job, profile)
+        const parsed = parseLLMResponse(raw)
+        setTailoredResume(parsed.tailoredResume || generateFallbackResume(profile.resumeText, job, profile))
+        setTailoredCover(parsed.tailoredCover || generateFallbackCover(profile.coverLetterTemplate, job, profile))
+      } else {
+        setGeneratingLabel('Tailoring resume (basic mode)...')
+        await new Promise(r => setTimeout(r, 1800))
+        setTailoredResume(generateFallbackResume(profile.resumeText, job, profile))
+        setTailoredCover(generateFallbackCover(profile.coverLetterTemplate, job, profile))
+      }
+
+      setResumeDraft('')
+      setCoverDraft('')
+      setEditingResume(false)
+      setEditingCover(false)
+      setResumeApproved(false)
+      setCoverApproved(false)
+      setStep('review')
+    } catch (e) {
+      console.error('Generation failed, falling back:', e)
+      setGeneratingLabel('Falling back to basic tailoring...')
+      await new Promise(r => setTimeout(r, 1000))
+      setTailoredResume(generateFallbackResume(profile.resumeText, job, profile))
+      setTailoredCover(generateFallbackCover(profile.coverLetterTemplate, job, profile))
+      setResumeDraft('')
+      setCoverDraft('')
+      setEditingResume(false)
+      setEditingCover(false)
+      setResumeApproved(false)
+      setCoverApproved(false)
+      setStep('review')
+    } finally {
+      setGenerating(false)
+    }
+  }
 
   useEffect(() => {
-    // Simulate AI generation with realistic delay
-    const timer = setTimeout(() => {
-      const resume = generateATSTailoredResume(profile.resumeText, job, profile)
-      const cover = generateTailoredCoverLetter(profile.coverLetterTemplate, job, profile)
-      setTailoredResume(resume)
-      setTailoredCover(cover)
-      setStep('review')
-    }, 2500)
-    return () => clearTimeout(timer)
+    generateDocs()
   }, [job])
 
-  const handleApply = () => {
+  const handleApply = async () => {
     if (!resumeApproved || !coverApproved) return
-    addAppliedJob(job.id, tailoredResume, tailoredCover)
+    // Use edited drafts if available, otherwise use AI result
+    const finalResume = resumeDraft || tailoredResume
+    const finalCover = coverDraft || tailoredCover
+
+    addAppliedJob(job.id, finalResume, finalCover)
+
+    // Send Gmail notification if enabled
+    if (profile.gmailNotifications) {
+      setEmailSent(true)
+      await sendGmailNotification(profile, job, finalResume, finalCover)
+    }
+
     setStep('confirmed')
     setTimeout(() => {
       onApplied()
       onClose()
-    }, 1800)
+    }, 2000)
+  }
+
+  const activeResume = resumeDraft || tailoredResume
+  const activeCover = coverDraft || tailoredCover
+  const isDrafting = (k) => k === 'resume' ? editingResume : editingCover
+  const setDrafting = (k, v) => k === 'resume' ? setEditingResume(v) : setEditingCover(v)
+  const draftVal = (k) => k === 'resume' ? resumeDraft : coverDraft
+  const setDraftVal = (k, v) => k === 'resume' ? setResumeDraft(v) : setCoverDraft(v)
+
+  const DocPanel = ({ type }) => {
+    const isResume = type === 'resume'
+    const label = isResume ? 'Resume' : 'Cover Letter'
+    const content = isResume ? activeResume : activeCover
+    const approved = isResume ? resumeApproved : coverApproved
+    const setApproved = isResume ? setResumeApproved : setCoverApproved
+    const isEditing = isDrafting(type)
+    const currentDraft = draftVal(type)
+
+    return (
+      <div className="doc-section">
+        <div className="flex justify-between items-center mb-2">
+          <p className="doc-label">{label} {isResume ? '- ATS Optimized' : ''}</p>
+          <div className="flex gap-2">
+            <button
+              className={`doc-toggle text-xs flex items-center gap-1 ${isEditing ? 'text-amber-400' : 'text-slate-500 hover:text-slate-300'}`}
+              onClick={() => { setDraftVal(type, content); setDrafting(type, !isEditing) }}
+            >
+              <EditIcon /> {isEditing ? 'Cancel Edit' : 'Edit'}
+            </button>
+            <button
+              className={`doc-toggle ${approved ? 'text-green-400' : 'text-slate-500'}`}
+              onClick={() => setApproved(!approved)}
+            >
+              {approved ? <><CheckIcon /> Approved</> : 'Approve'}
+            </button>
+          </div>
+        </div>
+
+        {isEditing ? (
+          <textarea
+            ref={isResume ? resumeRef : coverRef}
+            className="doc-textarea"
+            value={currentDraft}
+            onChange={e => setDraftVal(type, e.target.value)}
+            rows={18}
+            spellCheck={false}
+          />
+        ) : (
+          <pre className="doc-content">{content}</pre>
+        )}
+
+        {isEditing && (
+          <div className="mt-2 flex gap-2">
+            <button
+              className="btn-primary px-3 py-1.5 rounded-lg text-xs"
+              onClick={() => {
+                setDrafting(type, false)
+                setApproved(false)
+              }}
+            >
+              Save & Reset Approval
+            </button>
+          </div>
+        )}
+      </div>
+    )
   }
 
   return (
     <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal-content resume-modal">
+      <div className="modal-content resume-modal" style={{ maxWidth: '720px' }}>
         {/* Header */}
         <div className="modal-header">
           <div>
@@ -169,84 +482,63 @@ export default function ResumeModal({ job, onClose, onApplied }) {
         {/* Generating State */}
         {step === 'generating' && (
           <div className="modal-generating">
-            <div className="modal-sparkle">
-              <SparkleIcon />
-            </div>
+            <div className="modal-sparkle"><SparkleIcon /></div>
             <p className="text-sky-400 font-medium mt-4 mb-2">AI is tailoring your application...</p>
-            <p className="text-slate-400 text-sm">Optimizing resume for ATS and crafting cover letter</p>
+            <p className="text-slate-400 text-sm">{generatingLabel}</p>
             <div className="spinner mt-6" />
+            <button
+              className="mt-6 text-xs text-slate-500 hover:text-slate-300 flex items-center gap-1 mx-auto"
+              onClick={() => { setGenerating(false); setStep('review') }}
+            >
+              Skip / Cancel
+            </button>
           </div>
         )}
 
         {/* Review State */}
         {step === 'review' && (
           <>
-            <div className="modal-tabs">
-              <button
-                className={`modal-tab ${resumeApproved ? 'tab-approved' : ''}`}
-                onClick={() => setResumeApproved(!resumeApproved)}
-              >
-                <FileTextIcon /> Resume {resumeApproved && <span className="tab-check"><CheckIcon /></span>}
-              </button>
-              <button
-                className={`modal-tab ${coverApproved ? 'tab-approved' : ''}`}
-                onClick={() => setCoverApproved(!coverApproved)}
-              >
-                <FileTextIcon /> Cover Letter {coverApproved && <span className="tab-check"><CheckIcon /></span>}
-              </button>
+            {/* Toolbar */}
+            <div className="flex items-center justify-between mb-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '12px' }}>
+              <div className="flex items-center gap-2">
+                <button
+                  className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg transition-all"
+                  style={{ background: 'rgba(56,189,248,0.15)', color: '#38bdf8', border: '1px solid rgba(56,189,248,0.3)' }}
+                  onClick={generateDocs}
+                  disabled={generating}
+                >
+                  <RefreshIcon /> {generating ? 'Regenerating...' : 'Recreate Resume for Job'}
+                </button>
+                <span className="text-xs text-slate-500">
+                  {generating ? generatingLabel : 'Edit documents below, then approve each'}
+                </span>
+              </div>
+              {emailSent && (
+                <span className="text-xs text-green-400 flex items-center gap-1">
+                  <CheckIcon /> Email notification sent
+                </span>
+              )}
             </div>
 
-            <div className="modal-body">
-              {resumeApproved && !coverApproved && (
-                <div className="doc-section">
-                  <p className="doc-label">Resume - ATS Optimized</p>
-                  <pre className="doc-content">{tailoredResume}</pre>
-                </div>
-              )}
-              {!resumeApproved && coverApproved && (
-                <div className="doc-section">
-                  <p className="doc-label">Cover Letter</p>
-                  <pre className="doc-content">{tailoredCover}</pre>
-                </div>
-              )}
-              {(resumeApproved === coverApproved) && (
-                <>
-                  <div className="doc-section">
-                    <div className="flex justify-between items-center mb-2">
-                      <p className="doc-label">Resume - ATS Optimized</p>
-                      <button
-                        className={`doc-toggle ${resumeApproved ? 'text-green-400' : 'text-slate-500'}`}
-                        onClick={() => setResumeApproved(!resumeApproved)}
-                      >
-                        {resumeApproved ? 'OK Approved' : 'Approve'}
-                      </button>
-                    </div>
-                    <pre className="doc-content">{tailoredResume}</pre>
-                  </div>
-                  <div className="doc-divider" />
-                  <div className="doc-section">
-                    <div className="flex justify-between items-center mb-2">
-                      <p className="doc-label">Cover Letter</p>
-                      <button
-                        className={`doc-toggle ${coverApproved ? 'text-green-400' : 'text-slate-500'}`}
-                        onClick={() => setCoverApproved(!coverApproved)}
-                      >
-                        {coverApproved ? 'OK Approved' : 'Approve'}
-                      </button>
-                    </div>
-                    <pre className="doc-content">{tailoredCover}</pre>
-                  </div>
-                </>
-              )}
+            <div className="modal-body" style={{ maxHeight: '460px', overflowY: 'auto' }}>
+              {/* Resume tab */}
+              <DocPanel type="resume" />
+
+              <div className="doc-divider" />
+
+              {/* Cover Letter tab */}
+              <DocPanel type="cover" />
             </div>
 
             <div className="modal-footer">
               <p className="text-xs text-slate-500 flex-1">
-                {(!resumeApproved || !coverApproved) ? (
-                  `Approve both documents to enable Apply (${!resumeApproved ? 'resume' : ''}${!resumeApproved && !coverApproved ? ' & ' : ''}${!coverApproved ? 'cover letter' : ''} pending)`
-                ) : (
-                  'Both documents approved - ready to apply!'
+                {!profile.llmApiKey && (
+                  <span className="text-yellow-400">⚠ Basic tailoring only — add API key in Profile → AI Settings for AI-powered tailoring. </span>
                 )}
+                {(!resumeApproved || !coverApproved)
+                  ? `Approve both to apply (${!resumeApproved ? 'resume' : ''}${!resumeApproved && !coverApproved ? ' + ' : ''}${!coverApproved ? 'cover letter' : ''})`
+                  : 'Both approved — ready to apply!'
+                }
               </p>
               <button
                 className={`btn-primary px-5 py-2 rounded-lg text-sm font-medium flex items-center gap-2 ${resumeApproved && coverApproved ? '' : 'btn-disabled'}`}
@@ -264,7 +556,10 @@ export default function ResumeModal({ job, onClose, onApplied }) {
           <div className="modal-generating">
             <div className="modal-success-icon"><CheckIcon /></div>
             <p className="text-green-400 font-bold text-lg mt-4">Application Sent!</p>
-            <p className="text-slate-400 text-sm mt-2">Your tailored application has been submitted to {job.company}</p>
+            <p className="text-slate-400 text-sm mt-2">
+              Applied to {job.company} · {job.title}
+              {emailSent && <span className="block mt-1 text-sky-400">📧 Notification sent to {profile.email}</span>}
+            </p>
           </div>
         )}
       </div>

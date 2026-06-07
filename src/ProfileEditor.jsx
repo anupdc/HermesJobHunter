@@ -82,6 +82,7 @@ export default function ProfileEditor() {
     { id: 'skills', label: 'Skills' },
     { id: 'experience', label: 'Experience' },
     { id: 'resume', label: 'Resume & Cover Letter' },
+    { id: 'llm', label: 'AI Settings' },
     { id: 'schedule', label: 'Search Schedule' },
   ]
 
@@ -248,6 +249,76 @@ export default function ProfileEditor() {
                 placeholder="Use {JOB_TITLE}, {COMPANY}, {PERSONALIZATION_REASON}, {APPLICANT_NAME} as placeholders"
               />
             </div>
+          </div>
+        )}
+
+        {section === 'llm' && (
+          <div className="pe-section">
+            <h3 className="pe-section-title">AI Resume Tailoring</h3>
+            <p className="text-xs text-slate-500 mb-3">Configure AI to automatically tailor your resume for each job</p>
+
+            <div className="pe-fields">
+              <div className="pf-field">
+                <span className="pf-field-label">AI Provider</span>
+                <select
+                  className="pf-select"
+                  style={{ marginLeft: 'auto', minWidth: '160px' }}
+                  value={profile.llmProvider || 'openai'}
+                  onChange={e => updateProfile({ llmProvider: e.target.value })}
+                >
+                  <option value="openai">OpenAI (GPT-4o)</option>
+                  <option value="gemini">Google Gemini (2.0 Flash)</option>
+                </select>
+              </div>
+
+              <div className="pf-field" style={{ flexDirection: 'column', gap: '8px' }}>
+                <span className="pf-field-label">
+                  API Key
+                  <span className="text-xs text-slate-600 ml-2">(stored locally, never sent to our servers)</span>
+                </span>
+                <input
+                  className="pf-input"
+                  type="password"
+                  placeholder={profile.llmProvider === 'gemini' ? 'AIza...' : 'sk-...'}
+                  value={profile.llmApiKey || ''}
+                  onChange={e => updateProfile({ llmApiKey: e.target.value })}
+                />
+                {profile.llmProvider === 'openai' && (
+                  <a href="https://platform.openai.com/api-keys" target="_blank" rel="noreferrer" className="text-xs text-sky-400 hover:underline">
+                    Get OpenAI API Key →
+                  </a>
+                )}
+                {profile.llmProvider === 'gemini' && (
+                  <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="text-xs text-sky-400 hover:underline">
+                    Get Gemini API Key →
+                  </a>
+                )}
+              </div>
+
+              <div className="pf-field">
+                <span className="pf-field-label">Gmail Notifications</span>
+                <p className="text-xs text-slate-500" style={{ margin: '4px 0 8px' }}>Send applied job details to your Gmail</p>
+                <button
+                  className={`toggle-switch ${profile.gmailNotifications ? 'on' : 'off'}`}
+                  onClick={() => updateProfile({ gmailNotifications: !profile.gmailNotifications })}
+                  style={{ marginLeft: 'auto' }}
+                >
+                  <span className="toggle-knob" />
+                </button>
+              </div>
+            </div>
+
+            {profile.llmApiKey ? (
+              <div className="schedule-info" style={{ marginTop: '12px', background: 'rgba(74,222,128,0.1)', border: '1px solid rgba(74,222,128,0.2)' }}>
+                <span style={{ color: '#4ade80' }}>✓</span>
+                <span className="text-green-400 text-sm">AI resume tailoring is ready! When you apply to jobs, the AI will automatically rewrite your resume for each position.</span>
+              </div>
+            ) : (
+              <div className="schedule-info" style={{ marginTop: '12px', background: 'rgba(251,191,36,0.1)', border: '1px solid rgba(251,191,36,0.2)' }}>
+                <span style={{ color: '#fbbf24' }}>⚠</span>
+                <span className="text-yellow-400 text-sm">Add your API key above to enable AI-powered resume tailoring. Without it, the app uses basic keyword matching.</span>
+              </div>
+            )}
           </div>
         )}
       </div>

@@ -29,6 +29,10 @@ const DEFAULT_PROFILE = {
   ],
   certifications: ["AZ-400 Microsoft DevOps Engineer Expert", "AZ-103 Microsoft Azure Administrator", "MB6-894 D365 Finance & Operations Development"],
   languages: ["English", "Kannada", "Hindi"],
+  // LLM Settings for AI resume tailoring
+  llmProvider: 'openai', // 'openai' | 'gemini'
+  llmApiKey: '',
+  gmailNotifications: true, // send email when job is applied
   // Resume content
   resumeText: `Anup Chandavar
 D365 F&O Technical Consultant | Azure Certified Expert

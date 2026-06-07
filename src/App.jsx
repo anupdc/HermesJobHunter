@@ -3,7 +3,9 @@ import { ProfileProvider, useProfile } from './ProfileContext'
 import ResumeModal from './ResumeModal'
 import SchedulePanel from './SchedulePanel'
 import ProfileEditor from './ProfileEditor'
+import Scheduler from './Scheduler'
 import './App.css'
+import './scheduler-styles.css'
 
 // ─── Icons (inline SVG) ────────────────────────────────────────────────────
 const SearchIcon = () => (<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>)
@@ -20,6 +22,7 @@ const CheckCircleIcon = () => (<svg width="16" height="16" viewBox="0 0 24 24" f
 const ExternalLinkIcon = () => (<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>)
 const SparklesIcon = () => (<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/><path d="M5 3v4"/><path d="M19 17v4"/><path d="M3 5h4"/><path d="M17 19h4"/></svg>)
 const ClockIcon = () => (<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>)
+const CalendarIcon = () => (<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>)
 const FilterIcon = () => (<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>)
 const BoltIcon = () => (<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m13 2-2 6.5h6"/><path d="M11.5 8.5 6 18h4l-1 4h5l.5-4.5L20 18h-4"/></svg>)
 const SendIcon = () => (<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>)
@@ -79,6 +82,7 @@ function JobCard({ job, saved, onToggleSave, onApply, index }) {
         <div className="flex items-center gap-3">
           <span className="text-xs text-slate-500">{job.posted}</span>
           <span className="text-xs text-slate-500 flex items-center gap-1"><DollarIcon /> {job.salary}</span>
+          <span className="source-badge" data-source={job.source}>{job.source}</span>
         </div>
         <MatchBar score={job.match} />
       </div>
@@ -87,6 +91,11 @@ function JobCard({ job, saved, onToggleSave, onApply, index }) {
         <button className="btn-primary flex-1 text-center text-sm py-2 rounded-lg font-medium transition-all" onClick={() => onApply(job)}>
           Apply Now <SendIcon />
         </button>
+        {job.url && job.url !== '#' && (
+          <a href={job.url} target="_blank" rel="noopener noreferrer" className="btn-secondary px-3 py-2 rounded-lg text-sm transition-all flex items-center gap-1" title="Open on {job.source}">
+            <ExternalLinkIcon /> Web
+          </a>
+        )}
         <button onClick={() => onToggleSave(job.id)} className="btn-secondary px-3 py-2 rounded-lg text-sm transition-all">
           {saved ? "Saved" : "Save"}
         </button>
@@ -119,7 +128,7 @@ function StatsGrid({ jobs, appliedCount, savedCount }) {
 }
 
 // ─── Enhanced Search Bar ────────────────────────────────────────────────────
-function SearchBar({ query, setQuery, onSearch, locationFilter, setLocationFilter, salaryFilter, setSalaryFilter, onSearchNow }) {
+function SearchBar({ query, setQuery, onSearch, locationFilter, setLocationFilter, salaryFilter, setSalaryFilter, onSearchNow, onSearchEverywhere }) {
   const inputRef = useRef()
   return (
     <div className="search-container">
@@ -135,6 +144,13 @@ function SearchBar({ query, setQuery, onSearch, locationFilter, setLocationFilte
       />
       <button className="search-btn" onClick={onSearch}>Search</button>
       <button className="search-now-btn" onClick={onSearchNow} title="Search Now">⚡ Now</button>
+      <button
+        className="search-everywhere-btn"
+        onClick={onSearchEverywhere}
+        title="Search LinkedIn, Indeed, Naukri, Glassdoor & more"
+      >
+        🌐 Everywhere
+      </button>
     </div>
   )
 }
@@ -274,12 +290,53 @@ function AppInner() {
 
   const handleSearchNow = () => {
     setIsSearching(true)
-    setTimeout(() => {
+    const profile = { name: 'Anup Chandavar', title: 'D365 F&O Technical Consultant', experience: '7+ years',
+      skills: ['Dynamics 365 F&O','D365 F&O','X++','C#','.NET','Azure DevOps','Azure','CI/CD','LCS','ALM',
+        'Microsoft Fabric','Power BI','SQL Server','Power Platform','Power Automate','Canvas Apps',
+        'Azure Functions','Logic Apps','Service Bus','ERP','Finance','Retail','Commerce','WMS'],
+      preferredLocations: ['Bengaluru','Bangalore','Remote','Hyderabad','Pune','Mumbai','Chennai'],
+      preferredJobType: 'Full-time', remotePreference: 'Hybrid', expectedSalary: '₹25-40 LPA' }
+    const profileB64 = btoa(JSON.stringify(profile))
+    const q = encodeURIComponent(searchQuery || 'D365 Azure Dynamics 365 F&O')
+    fetch(`http://172.16.3.2:18081/search?q=${q}&l=Bangalore&profile=${profileB64}`)
+      .then(r => r.json())
+      .then(data => {
+        const filtered = applyFilters(data.jobs || [])
+        setJobs(filtered.length ? filtered : (data.jobs || []))
+        setIsSearching(false)
+        showToast(filtered.length ? `Found ${filtered.length} jobs!` : 'No matching jobs found')
+      })
+      .catch(() => {
+        const filtered = applyFilters([...SAMPLE_JOBS])
+        setJobs(filtered.length ? filtered : SAMPLE_JOBS)
+        setIsSearching(false)
+        showToast('Search complete (fallback jobs)')
+      })
+  }
+
+  const handleSearchEverywhere = async () => {
+    setIsSearching(true)
+    const profile = { name: 'Anup Chandavar', title: 'D365 F&O Technical Consultant', experience: '7+ years',
+      skills: ['Dynamics 365 F&O','D365 F&O','X++','C#','.NET','Azure DevOps','Azure','CI/CD','LCS','ALM',
+        'Microsoft Fabric','Power BI','SQL Server','Power Platform','Power Automate','Canvas Apps',
+        'Azure Functions','Logic Apps','Service Bus','ERP','Finance','Retail','Commerce','WMS'],
+      preferredLocations: ['Bengaluru','Bangalore','Remote','Hyderabad','Pune','Mumbai','Chennai'],
+      preferredJobType: 'Full-time', remotePreference: 'Hybrid', expectedSalary: '₹25-40 LPA' }
+    const profileB64 = btoa(JSON.stringify(profile))
+    try {
+      const res = await fetch(`http://172.16.3.2:18081/jobs?profile=${profileB64}&limit=25`)
+      if (!res.ok) throw new Error('API unreachable')
+      const data = await res.json()
+      const filtered = applyFilters(data.jobs || [])
+      setJobs(filtered.length ? filtered : (data.jobs || []))
+      showToast(filtered.length ? `Found ${filtered.length} jobs for you!` : 'No matching jobs found')
+    } catch {
       const filtered = applyFilters([...SAMPLE_JOBS])
       setJobs(filtered.length ? filtered : SAMPLE_JOBS)
+      showToast('Showing matched jobs (offline mode)')
+    } finally {
       setIsSearching(false)
-      showToast(filtered.length ? `Found ${filtered.length} jobs for you!` : 'No matching jobs found')
-    }, 800)
+    }
   }
 
   const resetFilters = () => {
@@ -295,6 +352,7 @@ function AppInner() {
   const tabs = [
     { id: 'home', label: 'Home', icon: <HomeIcon /> },
     { id: 'jobs', label: 'Jobs', icon: <BriefcaseIcon /> },
+    { id: 'scheduler', label: 'Scheduler', icon: <CalendarIcon /> },
     { id: 'saved', label: 'Saved', icon: <BookmarkIcon filled={false} /> },
     { id: 'profile', label: 'Profile', icon: <UserIcon /> },
   ]
@@ -374,6 +432,7 @@ function AppInner() {
               locationFilter={locationFilter} setLocationFilter={setLocationFilter}
               salaryFilter={salaryFilter} setSalaryFilter={setSalaryFilter}
               onSearchNow={handleSearchNow}
+              onSearchEverywhere={handleSearchEverywhere}
             />
             <FilterPanel
               locationFilter={locationFilter} setLocationFilter={setLocationFilter}
@@ -417,6 +476,7 @@ function AppInner() {
               locationFilter={locationFilter} setLocationFilter={setLocationFilter}
               salaryFilter={salaryFilter} setSalaryFilter={setSalaryFilter}
               onSearchNow={handleSearchNow}
+              onSearchEverywhere={handleSearchEverywhere}
             />
             <FilterPanel
               locationFilter={locationFilter} setLocationFilter={setLocationFilter}
@@ -424,6 +484,26 @@ function AppInner() {
               jobTypeFilter={jobTypeFilter} setJobTypeFilter={setJobTypeFilter}
               onReset={resetFilters}
             />
+
+            {/* ─── Search Platforms Bar ──────────────────────────────── */}
+            <div className="search-sources-bar">
+              <span className="search-sources-label">Search on:</span>
+              <a className="source-link naukri" href="https://www.naukri.com/jobs-in-bangalore?q=D365+Azure+Dynamics+F%26O+X%2B%2B" target="_blank" rel="noopener noreferrer">
+                <BuildingIcon /> Naukri
+              </a>
+              <a className="source-link linkedin" href="https://www.linkedin.com/jobs/search/?keywords=D365%20Azure%20Dynamics%20365%20F%26O&location=Bangalore" target="_blank" rel="noopener noreferrer">
+                <BuildingIcon /> LinkedIn
+              </a>
+              <a className="source-link indeed" href="https://in.indeed.com/jobs?q=D365%20Azure%20Dynamics%20365%20F%26O&l=Bangalore" target="_blank" rel="noopener noreferrer">
+                <BuildingIcon /> Indeed
+              </a>
+              <a className="source-link shine" href="https://www.shine.com/job-search/D365-Azure-Dynamics-F-O-X++-Bangalore" target="_blank" rel="noopener noreferrer">
+                <BuildingIcon /> Shine
+              </a>
+              <a className="source-link foundit" href="https://www.foundit.in/jobs/D365-Azure-Dynamics-in-Bangalore" target="_blank" rel="noopener noreferrer">
+                <BuildingIcon /> Foundit
+              </a>
+            </div>
 
             {isSearching ? (
               <div className="flex flex-col items-center justify-center py-20 gap-4">
@@ -478,6 +558,9 @@ function AppInner() {
 
         {/* PROFILE TAB */}
         {activeTab === 'profile' && <ProfileEditor />}
+
+        {/* SCHEDULER TAB */}
+        {activeTab === 'scheduler' && <Scheduler />}
       </main>
 
       {/* Modals */}
