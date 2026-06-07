@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useProfile } from './ProfileContext'
 
 const LockIcon = () => (<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>)
@@ -18,7 +18,7 @@ export default function CredentialsManager() {
   const [debugLoading, setDebugLoading] = useState(false)
 
   // Load saved credentials on mount
-  useState(() => {
+  useEffect(() => {
     if (window.electronAPI?.getCredentials) {
       window.electronAPI.getCredentials().then(creds => {
         console.log('[CredsManager] Loaded creds:', JSON.stringify(creds))
@@ -28,9 +28,9 @@ export default function CredentialsManager() {
         if (creds?.linkedin?.email) s.linkedin = true
         if (creds?.naukri?.email) s.naukri = true
         setSaved(s)
-      })
+      }).catch(err => console.error('[CredsManager] Failed to load credentials:', err))
     }
-  })
+  }, [])
 
   const handleSave = async (platform) => {
     const creds = platform === 'linkedin' ? linkedin : naukri
@@ -59,9 +59,19 @@ export default function CredentialsManager() {
     setDebugLoading(true)
     setDebug(null)
     try {
-      const creds = await window.electronAPI?.getCredentials()
-      const raw = await window.electronAPI?.getRawCredentials?.()
-      setDebug({ creds: JSON.stringify(creds), raw: raw || 'no raw API' })
+      // Try sync first (instant)
+      let creds = null
+      if (window.electronAPI?.getCredentialsSync) {
+        try { creds = window.electronAPI.getCredentialsSync() } catch {}
+      }
+      // Fall back to async
+      if (!creds && window.electronAPI?.getCredentials) {
+        try { creds = await window.electronAPI.getCredentials() } catch {}
+      }
+      const raw = window.electronAPI?.getRawCredentials
+        ? await window.electronAPI.getRawCredentials()
+        : 'no raw API'
+      setDebug({ creds: JSON.stringify(creds), raw })
     } catch (e) {
       setDebug({ error: e.message })
     }

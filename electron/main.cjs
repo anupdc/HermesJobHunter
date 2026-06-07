@@ -501,15 +501,26 @@ ipcMain.handle('get-credentials', async () => {
   return loadCredentials()
 })
 
+// Sync version — no async overhead
+ipcMain.on('get-credentials-sync', (event) => {
+  event.returnValue = loadCredentials()
+})
+
 ipcMain.handle('get-raw-credentials', async () => {
   // Return raw file contents so we can diagnose save/load issues
+  log('info', 'get-raw-credentials called, CREDS_FILE:', CREDS_FILE)
   try {
     const fs = require('fs')
-    if (!fs.existsSync(CREDS_FILE)) return 'FILE_NOT_FOUND'
+    if (!fs.existsSync(CREDS_FILE)) {
+      log('info', 'get-raw-credentials: FILE_NOT_FOUND')
+      return 'FILE_NOT_FOUND at ' + CREDS_FILE
+    }
     const raw = fs.readFileSync(CREDS_FILE, 'utf8').trim()
     if (!raw) return 'FILE_EMPTY'
+    log('info', 'get-raw-credentials: file size', raw.length)
     return `FILE_SIZE:${raw.length}_FIRST50:${raw.slice(0, 50)}`
   } catch (e) {
+    log('error', 'get-raw-credentials ERROR:', e.message)
     return 'ERROR: ' + e.message
   }
 })

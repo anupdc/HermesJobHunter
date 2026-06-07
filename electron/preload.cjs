@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   saveCredentials: (platform, creds) => ipcRenderer.invoke('save-credentials', platform, creds),
   getCredentials: () => ipcRenderer.invoke('get-credentials'),
   getRawCredentials: () => ipcRenderer.invoke('get-raw-credentials'),
+  getCredentialsSync: () => ipcRenderer.sendSync('get-credentials-sync'),  // sync version
   // Job searching (with stored credentials)
   searchJobsCredentialed: (keywords, location) => ipcRenderer.invoke('search-jobs-credentialed', { keywords, location }),
   // Fallback: open browser tabs
