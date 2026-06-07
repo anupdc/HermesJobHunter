@@ -87,7 +87,9 @@ export default function JobSearcher({ profile }) {
   const [searching, setSearching] = useState(false)
   const [searchDone, setSearchDone] = useState(false)
   const [jobCount, setJobCount] = useState(null)
-  const [searchMode, setSearchMode] = useState(null) // 'background' | 'browser-fallback' | 'error'
+  const [searchMode, setSearchMode] = useState(null) // 'background' | 'no-credentials'
+  const [searchedPlatforms, setSearchedPlatforms] = useState([])
+  const [failedPlatforms, setFailedPlatforms] = useState([])
 
   const searchQuery = [
     ...(profile.keywords || ['Dynamics 365', 'D365 F&O', 'Azure', 'ERP Developer', 'X++']),
@@ -100,37 +102,62 @@ export default function JobSearcher({ profile }) {
     setJobCount(null)
     setSearchMode(null)
 
-    // Background scrape first using stored credentials
-    let foundJobs = []
-    let scrapeWorked = false
+    const foundJobs = []
+    const searchedPlatforms = []
+    const failedPlatforms = []
 
+    // Try LinkedIn background search if credentials exist
     if (window.electronAPI?.searchJobsCredentialed) {
       try {
-        const jobs = await window.electronAPI.searchJobsCredentialed(keywords, 'Bangalore')
-        if (jobs && jobs.length > 0) {
-          foundJobs = jobs
-          scrapeWorked = true
-          setJobCount(jobs.length)
-          setSearchDone(true)
-          window.dispatchEvent(new CustomEvent('jobs-found', { detail: jobs }))
-          console.log(`Background scrape found ${jobs.length} jobs`)
+        const creds = await window.electronAPI.getCredentials()
+        if (creds?.linkedin?.email) {
+          searchedPlatforms.push('LinkedIn')
+          const jobs = await window.electronAPI.searchJobsCredentialed(keywords, 'Bangalore')
+          if (jobs && jobs.length > 0) {
+            foundJobs.push(...jobs)
+            console.log(`LinkedIn: found ${jobs.length} jobs`)
+          } else {
+            failedPlatforms.push('LinkedIn')
+          }
         }
       } catch (e) {
-        console.error('Credentialed search failed:', e)
+        console.error('LinkedIn search failed:', e)
+        failedPlatforms.push('LinkedIn')
       }
     }
 
-    // If background scrape found nothing, open browser tabs as fallback
-    if (!scrapeWorked) {
-      setSearchMode('browser-fallback')
-      const urls = PLATFORMS.map(p => buildSearchUrl(p.searchTemplate, keywords))
-      if (window.electronAPI?.openSearchUrls) {
-        await window.electronAPI.openSearchUrls(urls)
-      } else {
-        urls.forEach(url => window.open(url, '_blank'))
+    // Try Naukri background search if credentials exist
+    if (window.electronAPI?.searchJobsCredentialed) {
+      try {
+        const creds = await window.electronAPI.getCredentials()
+        if (creds?.naukri?.email) {
+          searchedPlatforms.push('Naukri')
+          const jobs = await window.electronAPI.searchJobsCredentialed(keywords, 'Bangalore')
+          if (jobs && jobs.length > 0) {
+            foundJobs.push(...jobs)
+            console.log(`Naukri: found ${jobs.length} jobs`)
+          } else {
+            failedPlatforms.push('Naukri')
+          }
+        }
+      } catch (e) {
+        console.error('Naukri search failed:', e)
+        failedPlatforms.push('Naukri')
       }
-    } else {
+    }
+
+    setSearchedPlatforms(searchedPlatforms)
+    setFailedPlatforms(failedPlatforms)
+
+    if (foundJobs.length > 0) {
+      setJobCount(foundJobs.length)
+      setSearchDone(true)
       setSearchMode('background')
+      window.dispatchEvent(new CustomEvent('jobs-found', { detail: foundJobs }))
+    } else {
+      setSearchDone(true)
+      setSearchMode('no-credentials')
+      setJobCount(0)
     }
 
     setSearching(false)
@@ -188,20 +215,20 @@ export default function JobSearcher({ profile }) {
         disabled={searching}
       >
         {searching ? <><SpinnerIcon /> Searching in background... </> :
-         searchDone && searchMode === 'background' ? <><CheckIcon /> Done! {jobCount} jobs pulled from LinkedIn + Naukri </> :
-         searchDone && searchMode === 'browser-fallback' ? <><GlobeIcon /> Opened 7 tabs in browser (LinkedIn blocked automated access) </> :
+         searchDone && searchMode === 'background' ? <><CheckIcon /> Done! {jobCount} jobs from {searchedPlatforms.join(' + ')} </> :
+         searchDone && searchMode === 'no-credentials' ? <><AlertIcon /> No credentials saved — go to Account Login first </> :
          <><GlobeIcon /> Search All Platforms — Background </>}
       </button>
 
-      {searchDone && searchMode === 'browser-fallback' && (
-        <p className="js-note" style={{ color: '#f59e0b', marginTop: 4 }}>
-          💡 Tip: Save LinkedIn + Naukri credentials in "Account Login" — background search won't need browser tabs
+      {searchDone && searchMode === 'no-credentials' && (
+        <p className="js-note" style={{ color: '#f87171', marginTop: 4 }}>
+          ⚠ No platform credentials saved. Go to "Account Login" above to add LinkedIn and/or Naukri credentials, then come back here.
         </p>
       )}
 
       {searchDone && searchMode === 'background' && (
         <p className="js-note" style={{ color: '#4ade80', marginTop: 4 }}>
-          ✅ Jobs pulled directly from your LinkedIn + Naukri accounts and added to the app
+          ✅ Jobs pulled directly from {searchedPlatforms.join(' + ')} — no browser tabs opened
         </p>
       )}
     </div>
