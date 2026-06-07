@@ -12,62 +12,25 @@ function log(level, ...args) {
 }
 
 // ─── Secure credential storage ───────────────────────────────────────────────
-const CREDS_FILE = path.join(app.getPath('userData'), 'credentials.enc')
-
-function getEncryptionKey() {
-  // Use only fixed machine identifiers — NOT app.getPath which can differ dev vs packaged
-  const machineId = [
-    process.env.COMPUTERNAME || '',
-    process.env.USERNAME || '',
-    process.env.USERDOMAIN || '',
-    'HermesJobHunter-Credentials-v1', // fixed salt — stable across runs
-  ].join('|')
-  return crypto.createHash('sha256').update(machineId).digest().slice(0, 32)
-}
-
-function encrypt(plaintext) {
-  try {
-    const key = getEncryptionKey()
-    const iv = crypto.randomBytes(16)
-    const cipher = crypto.createCipheriv('aes-256-cbc', key, iv)
-    let encrypted = cipher.update(plaintext, 'utf8', 'hex')
-    encrypted += cipher.final('hex')
-    return iv.toString('hex') + ':' + encrypted
-  } catch (e) { log('error', 'Encryption failed:', e.message); return null }
-}
-
-function decrypt(encrypted) {
-  try {
-    const key = getEncryptionKey()
-    const [ivHex, data] = encrypted.split(':')
-    const decipher = crypto.createDecipheriv('aes-256-cbc', key, Buffer.from(ivHex, 'hex'))
-    let decrypted = decipher.update(data, 'hex', 'utf8')
-    decrypted += decipher.final('utf8')
-    return decrypted
-  } catch (e) { log('warn', 'Decryption failed:', e.message); return null }
-}
+const CREDS_FILE = path.join(app.getPath('userData'), 'credentials.json')
 
 function loadCredentials() {
   try {
     if (!fs.existsSync(CREDS_FILE)) return {}
     const raw = fs.readFileSync(CREDS_FILE, 'utf8').trim()
     if (!raw) return {}
-    const decrypted = decrypt(raw)
-    if (!decrypted) return {}
-    return JSON.parse(decrypted)
+    return JSON.parse(raw)
   } catch (e) { log('warn', 'Could not load credentials:', e.message); return {} }
 }
 
 function saveCredentials(platform, creds) {
   try {
     const all = loadCredentials()
-    all[platform] = { email: creds.email, password: creds.password, encrypted: true }
-    const encrypted = encrypt(JSON.stringify(all))
-    if (!encrypted) throw new Error('Encryption returned null')
-    fs.writeFileSync(CREDS_FILE, encrypted, { mode: 0o600 })
-    log('info', 'Credentials saved for', platform)
+    all[platform] = { email: creds.email, password: creds.password }
+    fs.writeFileSync(CREDS_FILE, JSON.stringify(all, null, 2))
+    log('info', 'Credentials saved for', platform, 'to', CREDS_FILE)
     return true
-  } catch (e) { log('error', 'Failed to save credentials:', e.message); return false }
+  } catch (e) { log('error', 'Could not save credentials:', e.message); return false }
 }
 
 function getDecryptedCredentials(platform) {
