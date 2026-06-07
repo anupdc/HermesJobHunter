@@ -60,23 +60,29 @@
 
 .nav-tabs {
   display: flex;
-  gap: 4px;
+  gap: 2px;
+  overflow-x: auto;
+  flex-shrink: 1;
+  scrollbar-width: none;
 }
+.nav-tabs::-webkit-scrollbar { display: none; }
 
 .nav-tab {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px 16px;
+  gap: 4px;
+  padding: 8px 10px;
   border-radius: 8px;
   border: none;
   background: transparent;
   color: #94a3b8;
   cursor: pointer;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
   transition: all 0.2s;
   position: relative;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .nav-tab:hover {
