@@ -7,6 +7,20 @@ const EyeOffIcon = () => (<svg width="14" height="14" viewBox="0 0 24 24" fill="
 const CheckCircleIcon = () => (<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>)
 const BugIcon = () => (<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m8 2 1.88 1.88M14.12 3.88 16 2M9 7.13v-1a3.003 3.003 0 1 1 6 0v1"/><path d="M12 20c-3.3 0-6-2.7-6-6v-3a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v3c0 3.3-2.7 6-6 6"/><path d="M12 20v-9M6.53 9C4.6 8.8 3 7.1 3 5M6 13H2M6 17H2M18.47 9c-1.93-.2-3.53-1.9-3.53-4M18 13h4M18 17h4M12 9v9"/></svg>)
 
+// ─── localStorage fallback for Android (Capacitor has no Electron API) ─────
+function loadCredsLocal() {
+  try { return JSON.parse(localStorage.getItem('jobhunter_credentials') || '{}') }
+  catch { return {} }
+}
+function saveCredsLocal(platform, creds) {
+  try {
+    const all = loadCredsLocal()
+    all[platform] = { email: creds.email, password: creds.password }
+    localStorage.setItem('jobhunter_credentials', JSON.stringify(all))
+    return true
+  } catch { return false }
+}
+
 export default function CredentialsManager() {
   const [linkedin, setLinkedin] = useState({ email: '', password: '' })
   const [naukri, setNaukri] = useState({ email: '', password: '' })
@@ -17,18 +31,27 @@ export default function CredentialsManager() {
   const [debug, setDebug] = useState(null)
   const [debugLoading, setDebugLoading] = useState(false)
 
+  // Shared: apply loaded creds to component state
+  function applyCredentials(creds) {
+    console.log('[CredsManager] Loaded creds:', JSON.stringify(creds))
+    if (creds?.linkedin) setLinkedin({ email: creds.linkedin.email || '', password: '' })
+    if (creds?.naukri) setNaukri({ email: creds.naukri.email || '', password: '' })
+    const s = {}
+    if (creds?.linkedin?.email) s.linkedin = true
+    if (creds?.naukri?.email) s.naukri = true
+    setSaved(s)
+  }
+
   // Load saved credentials on mount
   useEffect(() => {
     if (window.electronAPI?.getCredentials) {
-      window.electronAPI.getCredentials().then(creds => {
-        console.log('[CredsManager] Loaded creds:', JSON.stringify(creds))
-        if (creds?.linkedin) setLinkedin({ email: creds.linkedin.email || '', password: '' })
-        if (creds?.naukri) setNaukri({ email: creds.naukri.email || '', password: '' })
-        const s = {}
-        if (creds?.linkedin?.email) s.linkedin = true
-        if (creds?.naukri?.email) s.naukri = true
-        setSaved(s)
-      }).catch(err => console.error('[CredsManager] Failed to load credentials:', err))
+      // Electron/Windows — IPC to main process
+      window.electronAPI.getCredentials()
+        .then(applyCredentials)
+        .catch(err => console.error('[CredsManager] Failed to load credentials:', err))
+    } else {
+      // Capacitor/Android — localStorage fallback
+      applyCredentials(loadCredsLocal())
     }
   }, [])
 
@@ -38,15 +61,23 @@ export default function CredentialsManager() {
     setSaving(true)
     setStatus(null)
     try {
+      let success = false
+
       if (window.electronAPI?.saveCredentials) {
+        // Electron/Windows — IPC to main process (writes credentials.json)
         const result = await window.electronAPI.saveCredentials(platform, { email: creds.email, password: creds.password })
         console.log('[CredsManager] Save result:', JSON.stringify(result))
-        if (result.success) {
-          setSaved(prev => ({ ...prev, [platform]: true }))
-          setStatus({ type: 'success', message: '✅ Saved and verified! Try "Search All Platforms — Background" now.' })
-        } else {
-          setStatus({ type: 'error', message: '❌ Save failed. Check console for details.' })
-        }
+        success = result?.success || false
+      } else {
+        // Capacitor/Android — localStorage fallback
+        success = saveCredsLocal(platform, { email: creds.email, password: creds.password })
+      }
+
+      if (success) {
+        setSaved(prev => ({ ...prev, [platform]: true }))
+        setStatus({ type: 'success', message: '✅ Saved and verified! Try \"Search All Platforms — Background\" now.' })
+      } else {
+        setStatus({ type: 'error', message: '❌ Save failed. Check console for details.' })
       }
     } catch (e) {
       console.error('[CredsManager] Save error:', e)
@@ -59,18 +90,20 @@ export default function CredentialsManager() {
     setDebugLoading(true)
     setDebug(null)
     try {
-      // Try sync first (instant)
       let creds = null
       if (window.electronAPI?.getCredentialsSync) {
         try { creds = window.electronAPI.getCredentialsSync() } catch {}
       }
-      // Fall back to async
       if (!creds && window.electronAPI?.getCredentials) {
         try { creds = await window.electronAPI.getCredentials() } catch {}
       }
+      if (!creds) {
+        // Android fallback
+        creds = loadCredsLocal()
+      }
       const raw = window.electronAPI?.getRawCredentials
         ? await window.electronAPI.getRawCredentials()
-        : 'no raw API'
+        : creds ? 'LOCALSTORAGE' : 'no storage API'
       setDebug({ creds: JSON.stringify(creds), raw })
     } catch (e) {
       setDebug({ error: e.message })

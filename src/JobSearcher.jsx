@@ -106,47 +106,51 @@ export default function JobSearcher({ profile }) {
     const searchedPlatforms = []
     const failedPlatforms = []
 
+    // Check stored credentials (Electron IPC or localStorage fallback)
+    let storedCreds = null
+    if (window.electronAPI?.getCredentials) {
+      try { storedCreds = await window.electronAPI.getCredentials() } catch {}
+    } else {
+      try { storedCreds = JSON.parse(localStorage.getItem('jobhunter_credentials') || '{}') } catch {}
+    }
+    console.log('Stored credentials:', JSON.stringify(storedCreds))
+
     // Try LinkedIn background search if credentials exist
-    if (window.electronAPI?.searchJobsCredentialed) {
+    if (storedCreds?.linkedin?.email && window.electronAPI?.searchJobsCredentialed) {
       try {
-        const creds = await window.electronAPI.getCredentials()
-        console.log('Stored credentials:', JSON.stringify(creds))
-        if (creds?.linkedin?.email) {
-          searchedPlatforms.push('LinkedIn')
-          const jobs = await window.electronAPI.searchJobsCredentialed(keywords, 'Bangalore')
-          if (jobs && jobs.length > 0) {
-            foundJobs.push(...jobs)
-            console.log(`LinkedIn: found ${jobs.length} jobs`)
-          } else {
-            failedPlatforms.push('LinkedIn')
-          }
+        searchedPlatforms.push('LinkedIn')
+        const jobs = await window.electronAPI.searchJobsCredentialed(keywords, 'Bangalore')
+        if (jobs && jobs.length > 0) {
+          foundJobs.push(...jobs)
+          console.log(`LinkedIn: found ${jobs.length} jobs`)
         } else {
-          console.log('No LinkedIn email in stored creds — creds object:', JSON.stringify(creds))
+          failedPlatforms.push('LinkedIn')
         }
       } catch (e) {
         console.error('LinkedIn search failed:', e)
         failedPlatforms.push('LinkedIn')
       }
+    } else if (storedCreds?.linkedin?.email) {
+      console.log('LinkedIn credentials found but background search not available on this platform')
     }
 
     // Try Naukri background search if credentials exist
-    if (window.electronAPI?.searchJobsCredentialed) {
+    if (storedCreds?.naukri?.email && window.electronAPI?.searchJobsCredentialed) {
       try {
-        const creds = await window.electronAPI.getCredentials()
-        if (creds?.naukri?.email) {
-          searchedPlatforms.push('Naukri')
-          const jobs = await window.electronAPI.searchJobsCredentialed(keywords, 'Bangalore')
-          if (jobs && jobs.length > 0) {
-            foundJobs.push(...jobs)
-            console.log(`Naukri: found ${jobs.length} jobs`)
-          } else {
-            failedPlatforms.push('Naukri')
-          }
+        searchedPlatforms.push('Naukri')
+        const jobs = await window.electronAPI.searchJobsCredentialed(keywords, 'Bangalore')
+        if (jobs && jobs.length > 0) {
+          foundJobs.push(...jobs)
+          console.log(`Naukri: found ${jobs.length} jobs`)
+        } else {
+          failedPlatforms.push('Naukri')
         }
       } catch (e) {
         console.error('Naukri search failed:', e)
         failedPlatforms.push('Naukri')
       }
+    } else if (storedCreds?.naukri?.email) {
+      console.log('Naukri credentials found but background search not available on this platform')
     }
 
     setSearchedPlatforms(searchedPlatforms)
@@ -157,6 +161,10 @@ export default function JobSearcher({ profile }) {
       setSearchDone(true)
       setSearchMode('background')
       window.dispatchEvent(new CustomEvent('jobs-found', { detail: foundJobs }))
+    } else if (storedCreds?.linkedin?.email || storedCreds?.naukri?.email) {
+      setSearchDone(true)
+      setSearchMode('no-credentials')
+      setJobCount(0)
     } else {
       setSearchDone(true)
       setSearchMode('no-credentials')
