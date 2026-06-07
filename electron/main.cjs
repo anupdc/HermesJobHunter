@@ -15,11 +15,12 @@ function log(level, ...args) {
 const CREDS_FILE = path.join(app.getPath('userData'), 'credentials.enc')
 
 function getEncryptionKey() {
+  // Use only fixed machine identifiers — NOT app.getPath which can differ dev vs packaged
   const machineId = [
     process.env.COMPUTERNAME || '',
     process.env.USERNAME || '',
     process.env.USERDOMAIN || '',
-    app.getPath('userData'),
+    'HermesJobHunter-Credentials-v1', // fixed salt — stable across runs
   ].join('|')
   return crypto.createHash('sha256').update(machineId).digest().slice(0, 32)
 }
@@ -520,7 +521,17 @@ function createWindow() {
 
 // ─── IPC Handlers ─────────────────────────────────────────────────────────────
 ipcMain.handle('save-credentials', async (event, platform, creds) => {
-  return { success: saveCredentials(platform, creds) }
+  const success = saveCredentials(platform, creds)
+  if (!success) return { success: false }
+  // Verify we can read it back immediately
+  const loaded = loadCredentials()
+  const stored = loaded[platform]
+  if (!stored || !stored.email || !stored.password) {
+    log('error', 'Credential save FAILED verification — file may not exist at expected path:', CREDS_FILE)
+    return { success: false, verified: false }
+  }
+  log('info', 'Credential saved and verified for', platform)
+  return { success: true, verified: true }
 })
 
 ipcMain.handle('get-credentials', async () => {

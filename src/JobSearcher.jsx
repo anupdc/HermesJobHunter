@@ -110,6 +110,7 @@ export default function JobSearcher({ profile }) {
     if (window.electronAPI?.searchJobsCredentialed) {
       try {
         const creds = await window.electronAPI.getCredentials()
+        console.log('Stored credentials:', JSON.stringify(creds))
         if (creds?.linkedin?.email) {
           searchedPlatforms.push('LinkedIn')
           const jobs = await window.electronAPI.searchJobsCredentialed(keywords, 'Bangalore')
@@ -119,6 +120,8 @@ export default function JobSearcher({ profile }) {
           } else {
             failedPlatforms.push('LinkedIn')
           }
+        } else {
+          console.log('No LinkedIn email in stored creds — creds object:', JSON.stringify(creds))
         }
       } catch (e) {
         console.error('LinkedIn search failed:', e)

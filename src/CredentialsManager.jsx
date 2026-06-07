@@ -14,6 +14,7 @@ export default function CredentialsManager({ onTestConnection }) {
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState({ linkedin: false, naukri: false })
   const [testResult, setTestResult] = useState({ linkedin: null, naukri: null })
+  const [status, setStatus] = useState(null)
   const { profile } = useProfile()
 
   // Load saved credentials from electron store on mount
@@ -41,11 +42,19 @@ export default function CredentialsManager({ onTestConnection }) {
     }
     try {
       if (window.electronAPI?.saveCredentials) {
-        await window.electronAPI.saveCredentials(platform, { email: creds.email, password: creds.password })
-        setSaved(prev => ({ ...prev, [platform]: true }))
+        const result = await window.electronAPI.saveCredentials(platform, { email: creds.email, password: creds.password })
+        if (result.success) {
+          setSaved(prev => ({ ...prev, [platform]: true }))
+          setStatus({ type: 'success', message: 'Saved! Background search will use these credentials.' })
+        } else if (result.verified === false) {
+          setStatus({ type: 'error', message: 'Saved but could not verify — please re-enter credentials.' })
+        } else {
+          setStatus({ type: 'error', message: 'Save failed. Try again.' })
+        }
       }
     } catch (e) {
       console.error('Save failed:', e)
+      setStatus({ type: 'error', message: 'Save failed: ' + e.message })
     }
     setSaving(false)
   }
@@ -83,6 +92,12 @@ export default function CredentialsManager({ onTestConnection }) {
         <LockIcon />
         <p>Credentials are encrypted and stored locally on your machine only. Never sent to any server.</p>
       </div>
+
+      {status && (
+        <div className={`creds-status-msg ${status.type}`}>
+          {status.type === 'success' ? '✅ ' : '❌ '}{status.message}
+        </div>
+      )}
 
       {/* LinkedIn */}
       <div className="creds-card">
