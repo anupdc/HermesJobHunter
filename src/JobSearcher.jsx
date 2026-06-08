@@ -115,11 +115,36 @@ export default function JobSearcher({ profile }) {
     }
     console.log('Stored credentials:', JSON.stringify(storedCreds))
 
+    // Detect available backend scraper
+    const hasElectronScraper = !!window.electronAPI?.searchJobsCredentialed
+    const hasAndroidScraper = !!(window.Capacitor?.Plugins?.JobScraper)
+    const hasBackgroundScraper = hasElectronScraper || hasAndroidScraper
+
+    // Helper: scrape with whatever backend is available
+    async function scrapePlatform(platformName, email, password) {
+      if (hasElectronScraper) {
+        return await window.electronAPI.searchJobsCredentialed(keywords, 'Bangalore')
+      }
+      if (hasAndroidScraper && platformName === 'linkedin') {
+        const result = await window.Capacitor.Plugins.JobScraper.scrapeLinkedIn({
+          email, password, keywords, location: 'Bangalore'
+        })
+        return result?.jobs || []
+      }
+      if (hasAndroidScraper && platformName === 'naukri') {
+        const result = await window.Capacitor.Plugins.JobScraper.scrapeNaukri({
+          email, password, keywords, location: 'Bangalore'
+        })
+        return result?.jobs || []
+      }
+      return []
+    }
+
     // Try LinkedIn background search if credentials exist
-    if (storedCreds?.linkedin?.email && window.electronAPI?.searchJobsCredentialed) {
+    if (storedCreds?.linkedin?.email && hasBackgroundScraper) {
       try {
         searchedPlatforms.push('LinkedIn')
-        const jobs = await window.electronAPI.searchJobsCredentialed(keywords, 'Bangalore')
+        const jobs = await scrapePlatform('linkedin', storedCreds.linkedin.email, storedCreds.linkedin.password)
         if (jobs && jobs.length > 0) {
           foundJobs.push(...jobs)
           console.log(`LinkedIn: found ${jobs.length} jobs`)
@@ -131,14 +156,14 @@ export default function JobSearcher({ profile }) {
         failedPlatforms.push('LinkedIn')
       }
     } else if (storedCreds?.linkedin?.email) {
-      console.log('LinkedIn credentials found but background search not available on this platform')
+      console.log('LinkedIn credentials found but no background scraper available')
     }
 
     // Try Naukri background search if credentials exist
-    if (storedCreds?.naukri?.email && window.electronAPI?.searchJobsCredentialed) {
+    if (storedCreds?.naukri?.email && hasBackgroundScraper) {
       try {
         searchedPlatforms.push('Naukri')
-        const jobs = await window.electronAPI.searchJobsCredentialed(keywords, 'Bangalore')
+        const jobs = await scrapePlatform('naukri', storedCreds.naukri.email, storedCreds.naukri.password)
         if (jobs && jobs.length > 0) {
           foundJobs.push(...jobs)
           console.log(`Naukri: found ${jobs.length} jobs`)
@@ -150,7 +175,7 @@ export default function JobSearcher({ profile }) {
         failedPlatforms.push('Naukri')
       }
     } else if (storedCreds?.naukri?.email) {
-      console.log('Naukri credentials found but background search not available on this platform')
+      console.log('Naukri credentials found but no background scraper available')
     }
 
     setSearchedPlatforms(searchedPlatforms)
