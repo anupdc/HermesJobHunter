@@ -229,6 +229,20 @@ function AppInner() {
     setAppliedJobIds(new Set(appliedJobs.map(a => a.jobId)))
   }, [appliedJobs])
 
+  // Listen for background search results from JobSearcher
+  useEffect(() => {
+    const handler = (e) => {
+      const scrapedJobs = e.detail || []
+      if (scrapedJobs.length > 0) {
+        setJobs(scrapedJobs)
+        setActiveTab('jobs')
+        showToast(`Found ${scrapedJobs.length} jobs from ${[...new Set(scrapedJobs.map(j => j.source))].join(' + ')}`)
+      }
+    }
+    window.addEventListener('jobs-found', handler)
+    return () => window.removeEventListener('jobs-found', handler)
+  }, [])
+
   const showToast = (msg) => {
     setToastMsg(msg)
     setTimeout(() => setToastMsg(''), 2500)
